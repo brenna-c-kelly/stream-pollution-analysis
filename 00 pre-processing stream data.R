@@ -13,31 +13,74 @@ library(stringr)
 library(ggplot2)
 library(tidycensus)
 
-getwd()
 
 load("data/nhd_tri.RData")
+str(nhd_tri)
 
-#nhd_streams <- st_read("/Users/brenna/Downloads/NHDPlusCO/NHDPlus14/WBDSnapshot/WBD")
-#nhd_attr <- st_read("/Users/brenna/Downloads/NHDPlusTX 2/NHDPlus12/NHDPlusAttributes", "PlusFlow")
-
+nhd_streams <- st_read("data/WBD_Subwatershed.shp") # HUC data
+#   ^for non-polluted streams and length
 
 ### getting administrative unit geometry
 counties <- get_decennial(geography = "county",
-                          variables = c("P5_001N"), #total population
+                          variables = c("P5_001N"),
                           geometry = TRUE,
                           year = 2020) %>%
   spread(variable, value) %>%
   group_by(GEOID) %>%
-  select(-c(P5_001N))
-
-
+  select(-c(P5_001N)) %>%
+  mutate(state = substr(GEOID, start = 0, stop = 2)) %>%
+  filter(!state %in% c("02", "15", "72")) # excluding noncontiguous
 
 names(counties) <- tolower(names(counties))
-#st_write(counties, "/stream analysis/data/counties.shp")
-#counties <- st_read("/Users/brenna/Documents/School/Thesis/counties.shp")
 
-st_layers("/Users/brenna/Documents/School/Thesis/NHDPlusNationalData/NHDPlusV21_National_Seamless_Flattened_Lower48.gdb")
-nhd <- st_read("/Users/brenna/Documents/School/Thesis/NHDPlusNationalData/NHDPlusV21_National_Seamless_Flattened_Lower48.gdb",
+
+list.files("NHD Micro Results/NHDMicroResults_OnsiteCore_1988/NHDMicroResults_OnsiteCore_1988.csv")
+
+
+# three things are needed
+#   • stream geometry (polluted and non-polluted)
+#       Source:
+#   • stream flow and length (flow approximates depth/width)
+#       Source: NHDPlus National Data (EPA)
+#       https://www.epa.gov/waterdata/nhdplus-national-data
+#   • stream toxicity
+#       Source:
+
+# stream geometry
+nhd_streams <- st_read("data/WBD_Subwatershed.shp")
+
+
+# stream toxicity
+read.csv("NHD Micro Results/NHDMicroResults_OnsiteCore_1988/NHDMicroResults_OnsiteCore_1988.csv")
+list.files("NHD Micro Results/")
+tox_files <- list.files("/Users/brenna/Documents/School/Thesis/stream-pollution-analysis/NHD Micro Results/NHDMicroResults_OnsiteCore_1988")
+st_layers("/Users/brenna/Documents/School/Thesis/stream-pollution-analysisNHD Micro ResultsNHDMicroResults_OnsiteCore_1988")
+st_layers(paste0(getwd(), "/NHD Micro Results/", tox_files[1]))
+
+streams_all <- st_read(paste0(getwd(), "/NHD Micro Results/", tox_files[1], "/", tox_files[1], ".shp"))
+streams_all$year <- NA
+streams_all <- streams_all[0, ]
+#streams <- st_read(paste0("NHD Micro Results/", tox_files[2], "/", tox_files[2], ".shp"))
+
+names(streams)
+for(i in 1:length(tox_files)) {
+  streams <- st_read(paste0(getwd(), "/NHD Micro Results/", tox_files[i], "/", tox_files[i], ".shp"))
+  names(streams) <- tolower(names(streams))
+  streams$year <- substr(tox_files[i], start = nchar(tox_files[i]) - 3, stop = nchar(tox_files[i]))
+  streams_all <- rbind(streams_all, streams)
+  #assign(paste0("streams_", i) , streams)
+}
+
+head(streams_all)
+
+
+#   • stream flow and length
+#...
+
+
+
+
+nhd <- st_read("/Users/brenna/Documents/School/Thesis/stream-pollution-analysis/NHDPlusNationalData/NHDPlusV21_National_Seamless_Flattened_Lower48.gdb",
                "NHDFlowline_Network")
 
 
