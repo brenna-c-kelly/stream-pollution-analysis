@@ -11,10 +11,11 @@ library(dplyr)
 library(foreign)
 library(stringr)
 library(ggplot2)
+library(viridis)
 library(tidycensus)
+getwd()
 
-
-load("data/nhd_tri.RData")
+#load("data/nhd_tri.RData")
 str(nhd_tri)
 
 nhd_streams <- st_read("data/WBD_Subwatershed.shp") # HUC data
@@ -53,9 +54,9 @@ nhd_streams <- st_read("data/WBD_Subwatershed.shp")
 # stream toxicity
 read.csv("NHD Micro Results/NHDMicroResults_OnsiteCore_1988/NHDMicroResults_OnsiteCore_1988.csv")
 list.files("NHD Micro Results/")
-tox_files <- list.files("/Users/brenna/Documents/School/Thesis/stream-pollution-analysis/NHD Micro Results/NHDMicroResults_OnsiteCore_1988")
-st_layers("/Users/brenna/Documents/School/Thesis/stream-pollution-analysisNHD Micro ResultsNHDMicroResults_OnsiteCore_1988")
-st_layers(paste0(getwd(), "/NHD Micro Results/", tox_files[1]))
+tox_files <- list.files("NHD Micro Results")
+st_layers("NHD Micro Results/NHDMicroResults_OnsiteCore_1988")
+st_layers(paste0("NHD Micro Results/", "NHDMicroResults_OnsiteCore_", 1988, "/", tox_files[1]))
 
 streams_all <- st_read(paste0(getwd(), "/NHD Micro Results/", tox_files[1], "/", tox_files[1], ".shp"))
 streams_all$year <- NA
@@ -72,18 +73,32 @@ for(i in 1:length(tox_files)) {
 }
 
 head(streams_all)
+streams_all$toxconc <- as.numeric(streams_all$toxconc)
 
+streams_2019 <- streams_all %>%
+  filter(year == 2019)
+
+# reproject
+aea <-  "+proj=aea +lat_1=29.5 +lat_2=45.5 +lat_0=37.5 +lon_0=-96 +ellps=GRS80 +datum=NAD83"
+streams_2019 <- st_as_sf(streams_2019)
+streams_2019 <- st_transform(streams_2020, aea)
+
+
+
+streams_2019$toxconc_log <- log(streams_2019$toxconc)
+tm_shape(streams_2019) +
+  tm_lines(col = "toxconc_log", palette = "-plasma", style = "cont", midpoint = NA)
 
 #   • stream flow and length
 #...
 
-
-
+flow <- st_read("data/NHDPlusV21_National_Seamless_Flattened_Lower48.gdb",
+                "NHDFlowline_Network")
 
 nhd <- st_read("/Users/brenna/Documents/School/Thesis/stream-pollution-analysis/NHDPlusNationalData/NHDPlusV21_National_Seamless_Flattened_Lower48.gdb",
                "NHDFlowline_Network")
 
-
+names(streams_all)
 head(tri_streams)
 
 #nhd <- nhd %>% #first prepare to merge with polluted streams, then filer
@@ -93,24 +108,27 @@ head(tri_streams)
 #  tm_lines(col = "LENGTHKM")
 
 #all streams, including non-polluted
-flow <- subset(nhd, select = -c(60:138))
+#flow <- subset(nhd, select = -c(60:138))
 summary(flow$QC_MA) #stream flow
 summary(flow$VC_MA) #stream velocity
-flow$VC_MA[flow$VC_MA < 0 ] <- NA
-summary(flow$LENGTHKM) #stream length
+#flow$VC_MA[flow$VC_MA < 0 ] <- NA
+#summary(flow$LENGTHKM) #stream length
+
+max(streams_all$comid)
 
 #polluted streams
-tri_streams <- st_read("/Users/brenna/Documents/School/Thesis/Data/NHD Micro Results/NHDMicroResults_OnsiteCore_2020")
-names(tri_streams)
+#tri_streams <- st_read("/Users/brenna/Documents/School/Thesis/Data/NHD Micro Results/NHDMicroResults_OnsiteCore_2020")
+#names(tri_streams)
+names(streams_all)
 # reach codes should be 14 characters long
-tri_streams$REACHCODE <- str_pad(tri_streams$REACHCODE, 14, pad = "0")
-# (I think) COMID should be 9 characters long
-tri_streams$COMID <- str_pad(tri_streams$REACHCODE, 14, pad = "0")
-tri_streams$TOXCONC <- as.numeric(tri_streams$TOXCONC)
+streams_all$reachcode <- str_pad(streams_all$reachcode, 14, pad = "0")
+# comid should be 9 characters long
+streams_all$comid <- str_pad(streams_all$comid, 9, pad = "0")
+
 # drop geometry before join
 tri_streams_nogeom <- st_drop_geometry(tri_streams)
 summary(tri_streams$TOXCONC)
-nhd_tri <- merge(flow, tri_streams_nogeom, by = "REACHCODE", all = T) #adding toxicity to stream data
+nhd_tri <- merge(flow, tri_streams_nogeom, by = "reachcode", all = T) #adding toxicity to stream data
 
 nhd_tri$unit <- substr(nhd_tri$REACHCODE, start = 1, stop = 2)
 nhd_tri$FTYPE <- as.factor(nhd_tri$FTYPE)
